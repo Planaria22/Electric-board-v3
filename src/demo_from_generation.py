@@ -32,14 +32,14 @@ PIN_SCK = 5                         # GP5, GP6, GP7 を連続して使う
 PIN_LATCH = 6
 PIN_OE = 7
 
-SCK_HZ = 2_000_000                  # SCK 周波数 (2MHz -> 約440Hzで全画面更新)
+SCK_HZ = 2000000                  # SCK 周波数 (2MHz -> 約440Hzで全画面更新)
 
-COL_ON = 0                          # カソード側: 0 で点灯 (逆なら 1)
-COL_OFF = 1 - COL_ON
+COL_ON = 1                          # カソード側: 0 で点灯 (逆なら 1)
+COL_OFF = 0
 ROW_ON = 0                          # アノード側: 選択行が 0 (仕様どおり)
 ROW_OFF = 1 - ROW_ON
 
-X_FLIP = False                      # 表示が左右反転していたら True
+X_FLIP = True                      # 表示が左右反転していたら True
 Y_FLIP = False                      # 表示が上下反転していたら True
 
 OFF, RED, GREEN, ORANGE = 0, 1, 2, 3
@@ -52,10 +52,10 @@ S_OE = 4
 
 # ---------------- PIO ----------------
 @rp2.asm_pio(
-    out_init=(rp2.PIO.OUT_LOW,) * 3,                                  # MOSI0,1,2
+    out_init=(rp2.PIO.OUT_LOW,) * 3,                                    # MOSI0,1,2
     sideset_init=(rp2.PIO.OUT_LOW, rp2.PIO.OUT_LOW, rp2.PIO.OUT_HIGH),  # SCK, LATCH, OE
-    out_shiftdir=rp2.PIO.SHIFT_LEFT,
-    fifo_join=rp2.PIO.JOIN_TX,
+    out_shiftdir=rp2.PIO.SHIFT_LEFT,                                    
+    fifo_join=rp2.PIO.JOIN_TX
 )
 def led_row():
     wrap_target()
@@ -64,19 +64,47 @@ def led_row():
     pull(block).side(0)
     set(x, 7).side(0)                         # 1ワード = 8クロック
     label("bit")
-    out(pins, 3).side(0)[1]                   # SCK Low: 3本同時にデータ出力
-    jmp(x_dec, "bit").side(S_SCK)[1]          # SCK High: 立ち上がりでシフト
+    out(pins, 3).side(0)[1]                   # SCK Low: 3bit同時にデータ出力
+    jmp(x_dec, "bit").side(1)[1]          # SCK High: 立ち上がりでシフト
     jmp(y_dec, "word").side(0)
     # 1行ぶんシフト完了 -> ブランクしてラッチ
-    nop().side(S_OE)[1]
-    nop().side(S_OE | S_LATCH)[1]
-    nop().side(S_OE)[1]
+    nop().side(4)[1]
+    nop().side(4 | 2)[1]
+    nop().side(4)[1]
     wrap()
 
 
 # ---------------- フレームバッファ ----------------
 # fb[y * 16 + n] の n 番目ワードに、クロック 8n .. 8n+7 の3bit(R,G,アノード)を格納
-fb = array("I", [0]) * (HEIGHT * WORDS_PER_ROW)
+fb = array("I", [0b0000] * (HEIGHT * WORDS_PER_ROW))
+
+# 色(0=消灯 1=赤 2=緑 3=橙) -> カソード2bit (bit0=赤, bit1=緑)
+_COLS = tuple(
+    (COL_ON if c & 1 else COL_OFF) | ((COL_ON if c & 2 else COL_OFF) << 1)
+    for c in range(4)
+)
+# クロック k(0..127) で送るドットの x 座標
+_XORDER = tuple((k if X_FLIP else WIDTH - 1 - k) for k in range(WIDTH))
+# fb の1ワード中でアノードのビットが入っている位置(bit31,28,25,...,10)
+_ANODE_MASK = 0x92492400
+
+
+def load_frame(src):
+    """画像を一括で fb に書き込む。
+    src: 長さ 32*128 の配列。行優先(src[y*128 + x])で、値は 0=消灯 1=赤 2=緑 3=橙。
+    fb は作り直さず中身だけ書き換える(DMA が fb を読み続けているため)。
+    アノードのビットは fb の値をそのまま残す。
+    """
+    if len(src) != WIDTH * HEIGHT:
+        raise ValueError("src length must be %d" % (WIDTH * HEIGHT))
+    for y in range(HEIGHT):
+        base = y * WIDTH
+        o = y * WORDS_PER_ROW
+        for wi in range(WORDS_PER_ROW):
+            v = 0
+            for k in range(wi * 8, wi * 8 + 8):
+                v = (v << 3) | _COLS[src[base + _XORDER[k]]]
+            fb[o + wi] = (fb[o + wi] & _ANODE_MASK) | (v << 8)
 
 
 def _sel_clock(y):
@@ -177,6 +205,19 @@ def demo():
         for y in range(HEIGHT):
             set_pixel(x, y, _stripe(y))
         x = (x + 1) % WIDTH
+
+def demo2():
+    for y in range(HEIGHT):
+        for x in range(0,WIDTH,4):
+            set_pixel(x, y, RED)
+    x=0
+    while True:
+        for y in range(HEIGHT):
+            set_pixel(x,y,OFF)
+        time.sleep_ms(50)
+        for y in range(HEIGHT):
+            set_pixel(x,y,GREEN)
+        x=(x+1)%WIDTH
 
 
 if __name__ == "__main__":
