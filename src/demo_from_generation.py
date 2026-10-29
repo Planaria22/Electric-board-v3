@@ -32,14 +32,14 @@ PIN_SCK = 5                         # GP5, GP6, GP7 を連続して使う
 PIN_LATCH = 6
 PIN_OE = 7
 
-SCK_HZ = 2000000                  # SCK 周波数 (2MHz -> 約440Hzで全画面更新)
+SCK_HZ = 2_000_000                  # SCK 周波数 (2MHz -> 約440Hzで全画面更新)
 
 COL_ON = 1                          # カソード側: 0 で点灯 (逆なら 1)
 COL_OFF = 0
 ROW_ON = 0                          # アノード側: 選択行が 0 (仕様どおり)
 ROW_OFF = 1 - ROW_ON
 
-X_FLIP = True                      # 表示が左右反転していたら True
+X_FLIP = False                      # 表示が左右反転していたら True
 Y_FLIP = False                      # 表示が上下反転していたら True
 
 OFF, RED, GREEN, ORANGE = 0, 1, 2, 3
@@ -205,19 +205,6 @@ def demo():
         for y in range(HEIGHT):
             set_pixel(x, y, _stripe(y))
         x = (x + 1) % WIDTH
-
-def demo2():
-    for y in range(HEIGHT):
-        for x in range(0,WIDTH,4):
-            set_pixel(x, y, RED)
-    x=0
-    while True:
-        for y in range(HEIGHT):
-            set_pixel(x,y,OFF)
-        time.sleep_ms(50)
-        for y in range(HEIGHT):
-            set_pixel(x,y,GREEN)
-        x=(x+1)%WIDTH
 
 
 if __name__ == "__main__":
