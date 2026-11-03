@@ -76,7 +76,7 @@ def led_row():
 
 # ---------------- フレームバッファ ----------------
 # fb[y * 16 + n] の n 番目ワードに、クロック 8n .. 8n+7 の3bit(R,G,アノード)を格納
-fb = array("I", [0b0000] * (HEIGHT * WORDS_PER_ROW))
+fb = array("I", [0b00000000] * (HEIGHT * WORDS_PER_ROW))
 
 # 色(0=消灯 1=赤 2=緑 3=橙) -> カソード2bit (bit0=赤, bit1=緑)
 _COLS = tuple(
