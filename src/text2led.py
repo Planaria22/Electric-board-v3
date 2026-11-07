@@ -11,8 +11,8 @@ import sys
 import unicodedata
 
 WIDTH, HEIGHT = 128, 32           # 表示全体
-GLYPH = 24                        # フォントサイズ
-TOP_MARGIN = (HEIGHT - GLYPH) // 2  # 縦中央寄せ (4px)
+GLYPH = 12                        # フォントサイズ (k8x12.bdf用に変更)
+TOP_MARGIN = (HEIGHT - GLYPH) // 2  # 縦中央寄せ (10px)
 COLORS = {"r": (1, 0), "g": (0, 1), "o": (1, 1)}   # (赤, 緑)  橙=同時点灯
 
 
@@ -102,8 +102,11 @@ def render(text, font, ascent, default_color="o", spacing=0, missing_code=0x2121
     bmp = Bitmap(max(1, len(items) * (GLYPH + spacing)))
     baseline = TOP_MARGIN + ascent
     for i, (ch, col) in enumerate(items):
-        code = to_jis(ch)
-        g = font.get(code) or font.get(missing_code)
+        # k8x12.bdf は Unicode ベースなので、直接 ord() で取得
+        code = ord(ch)
+        g = font.get(code)
+        if g is None:
+            g = font.get(missing_code)
         if g is None:
             continue
         w, h, xo, yo, rows = g
@@ -149,7 +152,7 @@ def frame_to_scan_data(red, green, active_low=True):
 
 # ---------------------------------------------------------------- 確認用
 def preview(red, green):
-    ch = {(0, 0): "·", (1, 0): "R", (0, 1): "G", (1, 1): "O"}
+    ch = {(0, 0): " ", (1, 0): "R", (0, 1): "G", (1, 1): "O"}
     return "\n".join("".join(ch[(red[y][x], green[y][x])] for x in range(len(red[y])))
                      for y in range(len(red)))
 
