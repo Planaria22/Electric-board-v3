@@ -14,7 +14,7 @@ from text2led import HEIGHT, WIDTH, load_bdf, render
 
 
 Color = Union[int, str]
-DEFAULT_BDF = Path(__file__).with_name("jiskan24.bdf")
+DEFAULT_BDF = Path(__file__).with_name("k8x12.bdf")
 
 _COLOR_NAMES = {
     0: 0,
@@ -68,7 +68,10 @@ def make_array(
         return array("I", [0] * (WIDTH * HEIGHT))
 
     font, ascent = load_bdf(str(bdf_path))
-    bitmap = render(text, font, ascent, default_color={1: "r", 2: "g", 3: "o"}[value])
+    # render() のビットマップが小さい場合でも window(0) で 128 列を取り出せるよう
+    # 最小幅を 128 に指定する
+    text_markup = f"{{1: 'r', 2: 'g', 3: 'o'}}[value]"  # 色を{r}{g}{o}タグで表現
+    bitmap = render(text, font, ascent, default_color={1: "r", 2: "g", 3: "o"}[value], spacing=2)
     red, green = bitmap.window(0)
 
     pixels = (
