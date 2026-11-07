@@ -1,4 +1,3 @@
-
 import rp2
 import array
 import uctypes
@@ -7,22 +6,18 @@ from machine import Pin
 
 # =========================================
 # PIO
-# GP2: Anode
-# GP3: Red cathode
-# GP4: Green cathode
-# GP5: SCK
-# GP6: LATCH
-# GP7: OE
+# GP0: Anode
+# GP1: Red cathode
+# GP2: Green cathode
+# GP4: SCK
+# GP5: LATCH
+# GP6: OE
 # =========================================
 
 
 @rp2.asm_pio(
     out_init=(rp2.PIO.OUT_LOW,) * 3,
-    sideset_init=(
-        rp2.PIO.OUT_LOW,
-        rp2.PIO.OUT_LOW,
-        rp2.PIO.OUT_LOW
-    ),
+    sideset_init=(rp2.PIO.OUT_LOW,rp2.PIO.OUT_LOW,rp2.PIO.OUT_LOW),
     out_shiftdir=rp2.PIO.SHIFT_LEFT,
     autopull=True,
     pull_thresh=24,
@@ -34,24 +29,18 @@ def led_pio_32():
 
     # 32画素分を出力
     set(x, 31).side(0b100)
-
+    
     label("bit")
-    out(pins, 3).side(0b100)[1]
-    jmp(x_dec, "bit").side(0b101)[1]
-
+    out(pins, 3).side(0b100)
+    jmp(x_dec, "bit").side(0b101)
+    
     # ラッチ
     nop().side(0b100)
-    nop().side(0b010)
-    nop().side(0b000)
+    nop().side(0b010)[3]
+    nop().side(0b000)[3]
 
     # 表示
-    nop().side(0b000)
-
-    # 表示時間
-    set(y, 31).side(0b000)
-
-    label("dwell")
-    jmp(y_dec, "dwell").side(0b000)[3]
+    
 
     wrap()
 
@@ -93,26 +82,66 @@ def pack_row(anode, red, green):
 
     return words
 
+def make_blank():
+
+    for y in range(32):
+
+        anode = 0xFFFFFFFF
+        red = 0
+        green = 0
+
+        words = pack_row(anode, red, green)
+
+        for i in range(4):
+            fb[y * 4 + i] = words[i]
+
+def make_test():
+
+    for y in range(32):
+        green=0
+        red = 0
+        anode = (~(1 << y)) & 0xFFFFFFFF
+
+        if y == 17:
+            red = 1 << 0
+
+        words = pack_row(anode, red, green)
+
+        for i in range(4):
+            fb[y * 4 + i] = words[i]
+
+def make_green_test():
+
+    for y in range(32):
+
+        anode = (~(1 << y)) & 0xFFFFFFFF
+        red = 0
+        green = 0xFFFFFFFF if y == 17 else 0
+
+        words = pack_row(anode, red, green)
+
+        for i in range(4):
+            fb[y * 4 + i] = words[i]
 
 def make_checkerboard():
 
     for y in range(32):
 
+        anode = 0xFFFFFFFF
         red = 0
+        green = 0
 
         for x in range(32):
 
+            # 市松模様
             if (x + y) % 2 == 0:
-                red |= 1 << x
+                anode &= ~(1 << y)
+                green |= (1 << x)
 
-        anode = 1 << y
-
-        words = pack_row(anode, red, 0)
+        words = pack_row(anode, red, green)
 
         for i in range(4):
             fb[y * 4 + i] = words[i]
-
-
 # =========================================
 # PIO
 # =========================================
@@ -120,9 +149,9 @@ def make_checkerboard():
 sm = rp2.StateMachine(
     0,
     led_pio_32,
-    freq=4_000_000,
-    out_base=Pin(2),
-    sideset_base=Pin(5)
+    freq=20_000_000,
+    out_base=Pin(0),
+    sideset_base=Pin(4)
 )
 
 
@@ -194,27 +223,37 @@ dma_addr.config(
     )
 )
 
-def dma_transfer():
-
-    dma.config(
-        read=fb,
-        write=PIO0_TXF0,
-        count=128,
-        ctrl=dma_ctrl,
-        trigger=True
-    )
+# def dma_transfer():
+# 
+#     dma.config(
+#         read=fb,
+#         write=PIO0_TXF0,
+#         count=128,
+#         ctrl=dma_ctrl,
+#         trigger=True
+#     )
 
 # =========================================
 # メイン
 # =========================================
 
 make_checkerboard()
+print([hex(fb[i]) for i in range(4)])
+print([hex(fb[i]) for i in range(4, 8)])
 
+dma_count.active(1)
 sm.active(1)
 
-# DMA 1から開始
-dma_count.active(1)
+FDEBUG = 0x50200008
+TXSTALL_SM0 = 1 << 24
 
-# 以後、DMA 1 → DMA 2 → DMA 3 → DMA 1 ...
+# TXSTALLをクリア
+machine.mem32[FDEBUG] = TXSTALL_SM0
+
+time.sleep_ms(100)
+
+print("FDEBUG:", hex(machine.mem32[FDEBUG]))
+print("TXSTALL:", (machine.mem32[FDEBUG] >> 24) & 1)
 while True:
-    time.sleep(1)
+    time.sleep_ms(100)
+    
